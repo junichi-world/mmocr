@@ -1,6 +1,9 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 from argparse import ArgumentParser
 
+import warnings
+
+import torch
 from mmocr.apis.inferencers import MMOCRInferencer
 
 
@@ -92,6 +95,18 @@ def parse_args():
 
 def main():
     init_args, call_args = parse_args()
+    if init_args.get('device') is None and torch.cuda.is_available():
+        major, _minor = torch.cuda.get_device_capability(0)
+        supported_sm = torch.cuda.get_arch_list()
+        target_sm = f'sm_{major * 10}'
+        # Older PyTorch builds (used to match mmcv wheels) may not support
+        # brand-new GPU architectures. Fall back to CPU instead of crashing.
+        if target_sm not in supported_sm:
+            warnings.warn(
+                f'Current PyTorch build does not support {target_sm} '
+                f'(supported: {supported_sm}). Falling back to CPU. '
+                'Specify --device cpu to silence this warning.')
+            init_args['device'] = 'cpu'
     ocr = MMOCRInferencer(**init_args)
     ocr(**call_args)
 

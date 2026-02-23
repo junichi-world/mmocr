@@ -1,5 +1,6 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 import argparse
+import importlib
 import logging
 import os
 import os.path as osp
@@ -8,6 +9,25 @@ from mmengine.config import Config, DictAction
 from mmengine.logging import print_log
 from mmengine.registry import RUNNERS
 from mmengine.runner import Runner
+
+
+def patch_collect_env_for_windows():
+    """Avoid training startup crash caused by MSVC output decode on Windows."""
+    if os.name != 'nt':
+        return
+    collect_env_module = importlib.import_module(
+        'mmengine.utils.dl_utils.collect_env')
+    runner_module = importlib.import_module('mmengine.runner.runner')
+    original_collect_env = collect_env_module.collect_env
+
+    def safe_collect_env():
+        try:
+            return original_collect_env()
+        except UnicodeDecodeError as e:
+            return {'collect_env_warning': f'{type(e).__name__}: {e}'}
+
+    collect_env_module.collect_env = safe_collect_env
+    runner_module.collect_env = safe_collect_env
 
 
 def parse_args():
@@ -54,6 +74,7 @@ def parse_args():
 
 def main():
     args = parse_args()
+    patch_collect_env_for_windows()
 
     # load config
     cfg = Config.fromfile(args.config)
